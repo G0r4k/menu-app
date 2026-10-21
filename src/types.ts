@@ -4,7 +4,6 @@ export interface MenuItem {
   description: string;
   price: string;
   badge?: string;
-  image?: string;
 }
 
 export interface MenuCategory {
@@ -18,7 +17,6 @@ export interface RestaurantInfo {
   name: string;
   tagline: string;
   type: 'restaurant' | 'bar' | 'club';
-  logo?: string;
 }
 
 export interface Theme {
@@ -40,3 +38,9 @@ export interface Theme {
 }
 
 export type ViewMode = 'setup' | 'preview';
+
+export interface SelectedElement {
+  type: 'header' | 'category' | 'item';
+  categoryId?: string;
+  itemId?: string;
+}
