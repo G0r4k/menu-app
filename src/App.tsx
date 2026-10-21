@@ -1,15 +1,16 @@
 import { useState, useCallback } from 'react';
-import { RestaurantInfo, MenuCategory, Theme, ViewMode } from './types';
+import { RestaurantInfo, MenuCategory, Theme, ViewMode, SelectedElement } from './types';
 import { themes } from './data/themes';
 import { generateAIMenu, generateTagline, generateRestaurantName } from './data/menuGenerator';
-import MenuPreview from './components/MenuPreview';
-import SetupWizard from './components/SetupWizard';
-import ThemeSelector from './components/ThemeSelector';
+import Canvas from './components/Canvas';
+import LeftSidebar from './components/LeftSidebar';
+import RightPanel from './components/RightPanel';
+import TopBar from './components/TopBar';
+import SetupOverlay from './components/SetupOverlay';
 import AnimatedBackground from './components/AnimatedBackground';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('setup');
-  const [currentStep, setCurrentStep] = useState(0);
   const [restaurantInfo, setRestaurantInfo] = useState<RestaurantInfo>({
     name: '',
     tagline: '',
@@ -19,27 +20,58 @@ function App() {
   const [selectedTheme, setSelectedTheme] = useState<Theme>(themes[0]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
+  const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
+  const [zoom, setZoom] = useState(100);
+  const [leftPanel, setLeftPanel] = useState<string>('themes');
+  const [history, setHistory] = useState<MenuCategory[][]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const aiSuggestions = [
-    'Analizando tendencias gastronómicas actuales...',
-    'Optimizando disposición visual del menú...',
-    'Seleccionando paleta de colores armónica...',
-    'Aplicando principios de diseño neurológico...',
+    'Analizando tendencias gastronómicas...',
+    'Optimizando composición visual...',
+    'Seleccionando tipografía armónica...',
+    'Aplicando principios de diseño...',
     'Generando descripciones apetitosas...',
-    'Finalizando diseño estético...',
+    'Renderizando diseño final...',
   ];
+
+  const pushHistory = useCallback((newCategories: MenuCategory[]) => {
+    setHistory(prev => [...prev.slice(0, historyIndex + 1), newCategories]);
+    setHistoryIndex(prev => prev + 1);
+  }, [historyIndex]);
+
+  const undo = useCallback(() => {
+    if (historyIndex > 0) {
+      setHistoryIndex(prev => prev - 1);
+      setMenuCategories(history[historyIndex - 1]);
+    }
+  }, [history, historyIndex]);
+
+  const redo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      setHistoryIndex(prev => prev + 1);
+      setMenuCategories(history[historyIndex + 1]);
+    }
+  }, [history, historyIndex]);
+
+  const updateCategories = useCallback((newCategories: MenuCategory[]) => {
+    setMenuCategories(newCategories);
+    pushHistory(newCategories);
+  }, [pushHistory]);
 
   const handleGenerateMenu = useCallback(async () => {
     setIsGenerating(true);
     setViewMode('preview');
-    
+
     for (let i = 0; i < aiSuggestions.length; i++) {
       setAiSuggestion(aiSuggestions[i]);
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
+
     const menu = generateAIMenu(restaurantInfo);
     setMenuCategories(menu);
+    setHistory([menu]);
+    setHistoryIndex(0);
     setIsGenerating(false);
     setAiSuggestion('');
   }, [restaurantInfo]);
@@ -51,101 +83,94 @@ function App() {
       name: generateRestaurantName(type),
       tagline: generateTagline(type),
     }));
-    setCurrentStep(1);
   };
 
-  const handleNameChange = (name: string) => {
-    setRestaurantInfo(prev => ({ ...prev, name }));
-  };
-
-  const handleTaglineChange = (tagline: string) => {
-    setRestaurantInfo(prev => ({ ...prev, tagline }));
-  };
-
-  const handleRegenerate = () => {
-    const newName = generateRestaurantName(restaurantInfo.type);
-    const newTagline = generateTagline(restaurantInfo.type);
-    setRestaurantInfo(prev => ({ ...prev, name: newName, tagline: newTagline }));
-  };
-
-  const handleBackToSetup = () => {
-    setViewMode('setup');
-    setCurrentStep(0);
+  const handleStartDesign = () => {
+    setViewMode('preview');
+    const menu = generateAIMenu(restaurantInfo);
+    setMenuCategories(menu);
+    setHistory([menu]);
+    setHistoryIndex(0);
   };
 
   return (
-    <div className={`min-h-screen transition-all duration-700 ${selectedTheme.bgGradient}`}>
+    <div className="h-screen w-screen overflow-hidden bg-[#0d0d0d] flex flex-col select-none">
+      {/* Animated BG only on setup */}
       {viewMode === 'setup' && <AnimatedBackground />}
-      {viewMode === 'setup' ? (
-        <SetupWizard
-          currentStep={currentStep}
-          restaurantInfo={restaurantInfo}
-          onTypeSelect={handleTypeSelect}
-          onNameChange={handleNameChange}
-          onTaglineChange={handleTaglineChange}
-          onRegenerate={handleRegenerate}
-          onNext={() => setCurrentStep(2)}
-          onGenerate={handleGenerateMenu}
-          onBack={() => setCurrentStep(Math.max(0, currentStep - 1))}
-        />
-      ) : (
-        <div className="min-h-screen">
-          {/* Top Bar */}
-          <div className="fixed top-0 left-0 right-0 z-50 bg-black/40 backdrop-blur-md border-b border-white/10">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-              <button
-                onClick={handleBackToSetup}
-                className="flex items-center gap-2 text-white/70 hover:text-white transition-colors"
-              >
-                <i className="fas fa-arrow-left"></i>
-                <span className="text-sm">Editar</span>
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="text-white/50 text-sm">Tema:</span>
-                <ThemeSelector
-                  themes={themes}
-                  selectedTheme={selectedTheme}
-                  onSelectTheme={setSelectedTheme}
-                  compact
-                />
-              </div>
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm transition-all"
-              >
-                <i className="fas fa-download"></i>
-                <span>Exportar</span>
-              </button>
-            </div>
-          </div>
 
-          {/* AI Generation Overlay */}
-          {isGenerating && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-              <div className="text-center">
-                <div className="relative mb-8">
-                  <div className="w-24 h-24 mx-auto rounded-full border-4 border-purple-500/30 flex items-center justify-center">
-                    <div className="w-20 h-20 rounded-full border-4 border-t-fuchsia-500 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
-                  </div>
-                  <div className="absolute inset-0 w-24 h-24 mx-auto rounded-full bg-fuchsia-500/10 animate-ping"></div>
-                </div>
-                <p className="text-white text-lg font-light animate-pulse">{aiSuggestion}</p>
-                <p className="text-white/40 text-sm mt-2">MenuAI está trabajando...</p>
-              </div>
-            </div>
-          )}
+      {/* Top Bar */}
+      <TopBar
+        viewMode={viewMode}
+        restaurantInfo={restaurantInfo}
+        zoom={zoom}
+        setZoom={setZoom}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        onUndo={undo}
+        onRedo={redo}
+        onBackToSetup={() => { setViewMode('setup'); setSelectedElement(null); }}
+      />
 
-          {/* Menu Preview */}
-          {!isGenerating && (
-            <MenuPreview
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {viewMode === 'setup' ? (
+          <SetupOverlay
+            restaurantInfo={restaurantInfo}
+            onTypeSelect={handleTypeSelect}
+            onNameChange={(name: string) => setRestaurantInfo(prev => ({ ...prev, name }))}
+            onTaglineChange={(tagline: string) => setRestaurantInfo(prev => ({ ...prev, tagline }))}
+            onRegenerate={() => {
+              setRestaurantInfo(prev => ({
+                ...prev,
+                name: generateRestaurantName(prev.type),
+                tagline: generateTagline(prev.type),
+              }));
+            }}
+            onGenerate={handleGenerateMenu}
+            onQuickStart={handleStartDesign}
+            isGenerating={isGenerating}
+            aiSuggestion={aiSuggestion}
+          />
+        ) : (
+          <>
+            {/* Left Sidebar */}
+            <LeftSidebar
+              activePanel={leftPanel}
+              onPanelChange={setLeftPanel}
+              themes={themes}
+              selectedTheme={selectedTheme}
+              onSelectTheme={setSelectedTheme}
+              categories={menuCategories}
+              selectedElement={selectedElement}
+              onSelectElement={setSelectedElement}
               restaurantInfo={restaurantInfo}
+              onUpdateRestaurantInfo={setRestaurantInfo}
+            />
+
+            {/* Canvas Area */}
+            <Canvas
               categories={menuCategories}
               theme={selectedTheme}
-              setCategories={setMenuCategories}
+              restaurantInfo={restaurantInfo}
+              zoom={zoom}
+              selectedElement={selectedElement}
+              onSelectElement={setSelectedElement}
+              onUpdateCategories={updateCategories}
             />
-          )}
-        </div>
-      )}
+
+            {/* Right Panel */}
+            <RightPanel
+              selectedElement={selectedElement}
+              categories={menuCategories}
+              theme={selectedTheme}
+              restaurantInfo={restaurantInfo}
+              onUpdateCategories={updateCategories}
+              onUpdateRestaurantInfo={setRestaurantInfo}
+              onDeselect={() => setSelectedElement(null)}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 }
